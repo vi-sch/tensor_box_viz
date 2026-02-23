@@ -1,0 +1,126 @@
+import { useState, useMemo } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { Scene } from './components/Scene';
+import { parseShape, parseTensor, computeLayout, type BoxInstance } from './lib/layout';
+
+export default function App() {
+  const [shapeStr, setShapeStr] = useState('2, 3, 4, 5'); // Example shape [B, C, H, W]
+  const [dataStr, setDataStr] = useState('');
+  const [labelsStr, setLabelsStr] = useState('B, C, H, W');
+  const [maxCells, setMaxCells] = useState(8);
+  const [mode, setMode] = useState<'tiling' | 'slicing'>('tiling');
+
+  const [spatialDims, setSpatialDims] = useState<[number | null, number | null, number | null]>([null, null, null]);
+  const [userAssignedDims, setUserAssignedDims] = useState(false);
+
+  const [sliceIndices, setSliceIndices] = useState<Record<number, number>>({});
+  const [hovered, setHovered] = useState<BoxInstance | null>(null);
+
+  // Compute derived state
+  const tensorData = useMemo(() => {
+    if (!dataStr.trim()) return null;
+    return parseTensor(dataStr);
+  }, [dataStr]);
+
+  const shape = useMemo(() => {
+    if (tensorData) return tensorData.shape;
+    return parseShape(shapeStr);
+  }, [shapeStr, tensorData]);
+
+  const handleSetSpatialDims = (dims: [number | null, number | null, number | null]) => {
+    setSpatialDims(dims);
+    setUserAssignedDims(true);
+  };
+
+  // Determine active spatial dims: fallback to last 3 if not overridden by user
+  const effectiveSpatialDims = useMemo(() => {
+    if (userAssignedDims) return spatialDims;
+    const l = shape.length;
+    return [
+      l >= 3 ? l - 3 : (l >= 1 ? 0 : null),
+      l >= 3 ? l - 2 : (l >= 2 ? 1 : null),
+      l >= 3 ? l - 1 : (l >= 3 ? 2 : null),
+    ] as [number | null, number | null, number | null];
+  }, [userAssignedDims, spatialDims, shape.length]);
+
+  const validSpatialDims = effectiveSpatialDims.map(d => (d !== null && d >= 0 && d < shape.length) ? d : null) as [number | null, number | null, number | null];
+  const outerDims = shape.map((_, i) => i).filter(d => !validSpatialDims.includes(d));
+
+  const layout = useMemo(() => {
+    return computeLayout({
+      shape,
+      spatialDims: validSpatialDims,
+      outerDims,
+      mode,
+      sliceIndices,
+      maxCellsPerDim: maxCells,
+      data: tensorData?.data
+    });
+  }, [shape, validSpatialDims, outerDims, mode, sliceIndices, maxCells, tensorData]);
+
+  const handleSetSliceIndex = (dim: number, idx: number) => {
+    setSliceIndices(prev => ({ ...prev, [dim]: idx }));
+  };
+
+  const handleExportPng = () => {
+    const canvas = document.getElementById('tensor-canvas') as HTMLCanvasElement;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = 'tensor-grid.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+  const handleExportJson = () => {
+    const config = { shape, spatialDims: validSpatialDims, outerDims, mode, maxCells, sliceIndices };
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.download = 'tensor-grid-settings.json';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  };
+
+  const labels = labelsStr.split(',').map(s => s.trim()).filter(Boolean);
+
+  return (
+    <div className="flex w-screen h-screen overflow-hidden bg-zinc-950 font-sans text-sm selection:bg-zinc-700">
+      <Sidebar
+        shapeStr={shapeStr} setShapeStr={setShapeStr}
+        dataStr={dataStr} setDataStr={setDataStr}
+        labelsStr={labelsStr} setLabelsStr={setLabelsStr}
+        maxCells={maxCells} setMaxCells={setMaxCells}
+        mode={mode} setMode={setMode}
+        spatialDims={validSpatialDims} setSpatialDims={handleSetSpatialDims}
+        outerDims={outerDims}
+        sliceIndices={sliceIndices} setSliceIndex={handleSetSliceIndex}
+        shape={shape}
+        onExportPng={handleExportPng}
+        onExportJson={handleExportJson}
+      />
+
+      <div className="flex-1 relative">
+        <Scene layout={layout} onHover={setHovered} />
+
+        {/* Tooltip Overlay */}
+        {hovered && (
+          <div className="absolute bottom-6 left-6 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-lg shadow-xl pointer-events-none z-10 transition-opacity">
+            <div className="font-semibold text-zinc-300 mb-2">Index Path</div>
+            <div className="font-mono text-xs flex gap-1.5 flex-wrap">
+              {hovered.indexPath.map((idx, i) => (
+                <span key={i} className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-zinc-100">
+                  {labels[i] || `d${i}`}=<span className="text-blue-400">{idx}</span>
+                </span>
+              ))}
+            </div>
+            {hovered.value !== undefined && (
+              <div className="mt-3 text-sm border-t border-zinc-800 pt-2">
+                <span className="text-zinc-500">Value:</span>{' '}
+                <span className="font-mono text-emerald-400 font-medium">{hovered.value}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
