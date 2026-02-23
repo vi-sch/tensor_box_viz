@@ -37,9 +37,9 @@ export default function App() {
     if (userAssignedDims) return spatialDims;
     const l = shape.length;
     return [
-      l >= 3 ? l - 3 : (l >= 1 ? 0 : null),
-      l >= 3 ? l - 2 : (l >= 2 ? 1 : null),
-      l >= 3 ? l - 1 : (l >= 3 ? 2 : null),
+      l >= 2 ? 1 : null, // X (2nd dim, e.g. columns)
+      l >= 1 ? 0 : null, // Y (1st dim, e.g. rows)
+      l >= 3 ? 2 : null, // Z (3rd dim, e.g. depth)
     ] as [number | null, number | null, number | null];
   }, [userAssignedDims, spatialDims, shape.length]);
 

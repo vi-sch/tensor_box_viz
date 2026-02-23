@@ -118,7 +118,7 @@ export function computeLayout(config: LayoutConfig): BoxInstance[] {
             }
 
             const x = rX + (tx * stepX);
-            const y = rY - (ty * stepY);
+            const y = -rY - (ty * stepY);
             const z = rZ;
 
             instances.push({

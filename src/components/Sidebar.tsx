@@ -71,12 +71,16 @@ export function Sidebar(props: SidebarProps) {
 
             <div>
                 <h2 className="text-white font-semibold mb-2">Axes Mapping</h2>
-                {['X', 'Y', 'Z'].map((axis, i) => (
+                {[
+                    { axis: 'Y (Rows)', index: 1 },
+                    { axis: 'X (Cols)', index: 0 },
+                    { axis: 'Z (Depth)', index: 2 }
+                ].map(({ axis, index }) => (
                     <div key={axis} className="flex items-center justify-between mb-2">
                         <span className="text-zinc-400">Spatial {axis}:</span>
                         <select
-                            value={spatialDims[i] ?? 'none'}
-                            onChange={e => handleSpatialChange(i, e.target.value)}
+                            value={spatialDims[index] ?? 'none'}
+                            onChange={e => handleSpatialChange(index, e.target.value)}
                             className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white"
                         >
                             <option value="none">None</option>
