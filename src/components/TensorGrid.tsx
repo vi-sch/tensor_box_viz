@@ -105,14 +105,15 @@ export function TensorGrid({ layout, onHover }: TensorGridProps) {
                 <meshStandardMaterial
                     roughness={0.4}
                     metalness={0.1}
-                    transparent
-                    opacity={0.85}
                     toneMapped={false}
+                    polygonOffset
+                    polygonOffsetFactor={1}
+                    polygonOffsetUnits={1}
                 />
             </instancedMesh>
 
             <instancedMesh ref={edgesRef} args={[edgesGeom, undefined, layout.length]}>
-                <lineBasicMaterial toneMapped={false} transparent opacity={0.5} />
+                <lineBasicMaterial toneMapped={false} />
             </instancedMesh>
         </group>
     );

@@ -8,6 +8,7 @@ An interactive 3D web application to visualize N-dimensional rank tensor shapes 
 - **Tiling & Slicing Controls**: Choose between viewing all nested dimensions mapped in a large repeated tile layout (`Tiling`), or isolate single layers with sliders (`Slicing`).
 - **Data Rendering**: Paste multi-dimensional JSON nested arrays into the sidebar to apply heatmap colors.
 - **Performant**: Built using Three.js `InstancedMesh`, easily rendering thousands of cells at 60 FPS.
+- **Simplified Rendering**: Uses opaque cubes with edge lines to ensure clear, artifact-free depth perception without complex multi-layered transparency.
 - **Downsampling**: Dynamically samples large dimensions using uniform spacing to fit max cells without freezing the browser layout. 
 - **Export**: Export scenes as PNG screenshots or save configuration settings as JSON.
 
