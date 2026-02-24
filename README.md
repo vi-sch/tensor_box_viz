@@ -10,6 +10,7 @@ An interactive 3D web application to visualize N-dimensional rank tensor shapes 
 - **Performant**: Built using Three.js `InstancedMesh` with GPU instancing, layout-only geometry recomputation, no per-instance CPU color computation, and unlit `meshBasicMaterial` — easily rendering thousands of cells at 60 FPS.
 - **Simplified Rendering**: Uses solid opaque flat-colored cubes with black edge outlines. Faces properly occlude edges behind them (not wireframe), giving clear cell boundaries and artifact-free depth perception.
 - **Downsampling**: Dynamically samples large dimensions using uniform spacing to fit max cells without freezing the browser layout. 
+- **Coordinate System Triad**: A bottom-right overlay shows a 3D axis indicator that rotates in sync with the main camera. Arrow directions match the index iteration directions (X points right, Y points down, Z points into screen). Each arrow is labeled with the corresponding dimension name (e.g., "C", "B", "H"), and any additional dimensions tiled along that axis are shown as smaller secondary labels beneath.
 - **Export**: Export scenes as PNG screenshots or save configuration settings as JSON.
 
 ## Setup and Usage

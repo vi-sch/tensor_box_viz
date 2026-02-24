@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Scene } from './components/Scene';
 import { parseShape, parseTensor, computeLayout, type BoxInstance } from './lib/layout';
+import type { AxisLabels } from './components/AxisTriad';
 
 export default function App() {
   const [shapeStr, setShapeStr] = useState('2, 3, 4, 5'); // Example shape [B, C, H, W]
@@ -94,6 +95,37 @@ export default function App() {
 
   const labels = labelsStr.split(',').map(s => s.trim()).filter(Boolean);
 
+  // Build axis labels for the coordinate triad
+  // Includes primary spatial dim labels + tiled dim labels grouped by axis
+  const axisLabels = useMemo((): AxisLabels => {
+    const getLabel = (dimIdx: number | null, fallback: string) => {
+      if (dimIdx === null) return fallback;
+      return labels[dimIdx] || `d${dimIdx}`;
+    };
+    const [sx, sy, sz] = validSpatialDims;
+
+    // Compute tiled dims per axis (cycle: Y → X → Z → repeat)
+    // This mirrors the logic in layout.ts activeTileDims.forEach
+    const tiledX: string[] = [];
+    const tiledY: string[] = [];
+    const tiledZ: string[] = [];
+    if (mode === 'tiling') {
+      outerDims.forEach((dim, i) => {
+        const axisIdx = i % 3;
+        const dimLabel = labels[dim] || `d${dim}`;
+        if (axisIdx === 0) tiledY.push(dimLabel);      // tile cycle: Y first
+        else if (axisIdx === 1) tiledX.push(dimLabel);  // then X
+        else tiledZ.push(dimLabel);                     // then Z
+      });
+    }
+
+    return {
+      x: { primary: getLabel(sx, 'X'), tiled: tiledX },
+      y: { primary: getLabel(sy, 'Y'), tiled: tiledY },
+      z: { primary: getLabel(sz, 'Z'), tiled: tiledZ },
+    };
+  }, [validSpatialDims, labels, outerDims, mode]);
+
   return (
     <div className="flex w-screen h-screen overflow-hidden bg-zinc-950 font-sans text-sm selection:bg-zinc-700">
       <Sidebar
@@ -111,7 +143,7 @@ export default function App() {
       />
 
       <div className="flex-1 relative">
-        <Scene layout={layout} onHover={setHovered} />
+        <Scene layout={layout} onHover={setHovered} axisLabels={axisLabels} />
 
         {/* Tooltip Overlay */}
         {hovered && (
