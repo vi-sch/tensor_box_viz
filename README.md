@@ -7,8 +7,15 @@ An interactive 3D web application to visualize N-dimensional rank tensor shapes 
 - **N-Dimensional Support**: Visualizes tensors up to rank 8. By default, maps up to 3 dimensions to X, Y, and Z spatial dimensions, while recursively tiling outer dimensions along the rows (Y), columns (X), and depth (Z) axes in a repeating cycle.
 - **Tiling & Slicing Controls**: Choose between viewing all nested dimensions mapped in a large repeated tile layout (`Tiling`), or isolate single layers with sliders (`Slicing`).
 - **Data Rendering**: Paste multi-dimensional JSON nested arrays into the sidebar to apply heatmap colors.
-- **Performant**: Built using Three.js `InstancedMesh` with GPU instancing, layout-only geometry recomputation, no per-instance CPU color computation, and unlit `meshBasicMaterial` — easily rendering thousands of cells at 60 FPS.
+- **Performant**: Built using Three.js `InstancedMesh` with GPU instancing and multiple layers of optimization:
+  - **Frame-throttled hover**: Pointer events are batched and processed once per render frame via `useFrame`, eliminating redundant raycasts on high-refresh-rate displays.
+  - **Instanced edge rendering**: Black outlines use `InstancedBufferGeometry` with a custom `ShaderMaterial`, sharing a single 24-vertex edge template across all boxes. Memory usage scales as O(N×3) offsets instead of O(N×72) merged vertices.
+  - **Isolated tooltip re-renders**: Hover state is managed via an external store (`useSyncExternalStore`), so only the tooltip component re-renders on hover — the 3D scene tree is never touched.
+  - **Unlit materials**: Uses `meshBasicMaterial` with no lights for minimal GPU overhead.
 - **Simplified Rendering**: Uses solid opaque flat-colored cubes with black edge outlines. Faces properly occlude edges behind them (not wireframe), giving clear cell boundaries and artifact-free depth perception.
+- **Cube Color Modes**: Choose how cubes are colored:
+  - **Uniform**: All cube faces share a single color, configurable via a color picker or hex input.
+  - **Axis**: Each pair of cube faces is colored based on its axis-aligned normal direction, matching the coordinate system triad — Red for X-facing faces, Green for Y-facing faces, Blue for Z-facing faces. This makes it easy to visually distinguish which spatial dimension each face belongs to.
 - **Downsampling**: Dynamically samples large dimensions using uniform spacing to fit max cells without freezing the browser layout. 
 - **Coordinate System Triad**: A bottom-right overlay shows a 3D axis indicator that rotates in sync with the main camera. Arrow directions match the index iteration directions (X points right, Y points down, Z points into screen). Each arrow is labeled with the corresponding dimension name (e.g., "C", "B", "H"), and any additional dimensions tiled along that axis are shown as smaller secondary labels beneath.
 - **Export**: Export scenes as PNG screenshots or save configuration settings as JSON.
@@ -37,6 +44,10 @@ When the application loads, you can configure your tensor's shape on the left si
 You can toggle between **Tiling** or **Slicing** modes to best suit your visualization needs:
 * **Tiling**: Layers are repeated outward to display the full N-dimensional space. Outer dimensions cycle through **rows (Y) → columns (X) → depth (Z)** and repeat. For example, for a 6D tensor with 3 spatial dims, the 4th dimension tiles along Y, the 5th along X, and the 6th along Z. Additional dimensions repeat the cycle (7th→Y, 8th→X, etc.).
 * **Slicing**: View one specific slice along a dimension using sliders.
+
+The **Cube Color** section lets you control how cubes are rendered:
+* **Uniform**: Pick any color using the color picker or type a hex value (e.g., `#3f3f46`). All cube faces will use this color.
+* **Axis**: Cube faces are automatically colored based on their axis direction — matching the coordinate system triad in the bottom-right corner. This is useful for understanding orientation at a glance.
 
 3. **Run Unit Tests**:
    ```bash

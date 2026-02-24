@@ -1,8 +1,36 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Scene } from './components/Scene';
 import { parseShape, parseTensor, computeLayout, type BoxInstance } from './lib/layout';
 import type { AxisLabels } from './components/AxisTriad';
+import type { ColorMode } from './components/TensorGrid';
+
+/**
+ * A tiny external store for hover state.
+ * This avoids re-rendering the 3D scene when hover changes — only the
+ * tooltip component subscribes and re-renders.
+ */
+function createHoverStore() {
+  let current: BoxInstance | null = null;
+  const listeners = new Set<() => void>();
+
+  return {
+    set(value: BoxInstance | null) {
+      if (current === value) return;
+      current = value;
+      listeners.forEach(l => l());
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    getSnapshot() {
+      return current;
+    },
+  };
+}
+
+const hoverStore = createHoverStore();
 
 export default function App() {
   const [shapeStr, setShapeStr] = useState('2, 3, 4, 5'); // Example shape [B, C, H, W]
@@ -19,8 +47,10 @@ export default function App() {
 
   const [dimOrder, setDimOrder] = useState<'first-to-last' | 'last-to-first'>('first-to-last');
 
+  const [colorMode, setColorMode] = useState<ColorMode>('uniform');
+  const [cubeColor, setCubeColor] = useState('#646a96');
+
   const [sliceIndices, setSliceIndices] = useState<Record<number, number>>({});
-  const [hovered, setHovered] = useState<BoxInstance | null>(null);
 
   // Compute derived state
   const tensorData = useMemo(() => {
@@ -126,6 +156,11 @@ export default function App() {
     };
   }, [validSpatialDims, labels, outerDims, mode]);
 
+  // Stable callback ref for hover — writes to external store, doesn't trigger App re-render
+  const handleHover = useCallback((instance: BoxInstance | null) => {
+    hoverStore.set(instance);
+  }, []);
+
   return (
     <div className="flex w-screen h-screen overflow-hidden bg-zinc-950 font-sans text-sm selection:bg-zinc-700">
       <Sidebar
@@ -140,31 +175,44 @@ export default function App() {
         shape={shape}
         onExportPng={handleExportPng}
         onExportJson={handleExportJson}
+        colorMode={colorMode}
+        setColorMode={setColorMode}
+        cubeColor={cubeColor}
+        setCubeColor={setCubeColor}
       />
 
       <div className="flex-1 relative">
-        <Scene layout={layout} onHover={setHovered} axisLabels={axisLabels} />
+        <Scene layout={layout} onHover={handleHover} axisLabels={axisLabels} colorMode={colorMode} cubeColor={cubeColor} />
 
-        {/* Tooltip Overlay */}
-        {hovered && (
-          <div className="absolute bottom-6 left-6 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-lg shadow-xl pointer-events-none z-10 transition-opacity">
-            <div className="font-semibold text-zinc-300 mb-2">Index Path</div>
-            <div className="font-mono text-xs flex gap-1.5 flex-wrap">
-              {hovered.indexPath.map((idx, i) => (
-                <span key={i} className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-zinc-100">
-                  {labels[i] || `d${i}`}=<span className="text-blue-400">{idx}</span>
-                </span>
-              ))}
-            </div>
-            {hovered.value !== undefined && (
-              <div className="mt-3 text-sm border-t border-zinc-800 pt-2">
-                <span className="text-zinc-500">Value:</span>{' '}
-                <span className="font-mono text-emerald-400 font-medium">{hovered.value}</span>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Tooltip — subscribes to hover store independently, no App re-render */}
+        <HoverTooltip labels={labels} />
       </div>
+    </div>
+  );
+}
+
+/** Isolated tooltip component that subscribes to hover state via external store */
+function HoverTooltip({ labels }: { labels: string[] }) {
+  const hovered = useSyncExternalStore(hoverStore.subscribe, hoverStore.getSnapshot);
+
+  if (!hovered) return null;
+
+  return (
+    <div className="absolute bottom-6 left-6 bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-lg shadow-xl pointer-events-none z-10 transition-opacity">
+      <div className="font-semibold text-zinc-300 mb-2">Index Path</div>
+      <div className="font-mono text-xs flex gap-1.5 flex-wrap">
+        {hovered.indexPath.map((idx, i) => (
+          <span key={i} className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-zinc-100">
+            {labels[i] || `d${i}`}=<span className="text-blue-400">{idx}</span>
+          </span>
+        ))}
+      </div>
+      {hovered.value !== undefined && (
+        <div className="mt-3 text-sm border-t border-zinc-800 pt-2">
+          <span className="text-zinc-500">Value:</span>{' '}
+          <span className="font-mono text-emerald-400 font-medium">{hovered.value}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 
+import type { ColorMode } from './TensorGrid';
 
 interface SidebarProps {
     shapeStr: string;
@@ -17,6 +18,10 @@ interface SidebarProps {
     sliceIndices: Record<number, number>;
     setSliceIndex: (dim: number, idx: number) => void;
     shape: number[];
+    colorMode: ColorMode;
+    setColorMode: (mode: ColorMode) => void;
+    cubeColor: string;
+    setCubeColor: (color: string) => void;
     onExportPng: () => void;
     onExportJson: () => void;
 }
@@ -160,6 +165,60 @@ export function Sidebar(props: SidebarProps) {
                     onChange={e => props.setMaxCells(parseInt(e.target.value, 10))}
                 />
                 <span className="text-zinc-600 text-xs">High values may reduce performance.</span>
+            </div>
+
+            <div className="h-px w-full bg-zinc-800 my-2" />
+
+            <div>
+                <h2 className="text-white font-semibold mb-2">Cube Color</h2>
+                <div className="flex gap-2 mb-3">
+                    <button
+                        onClick={() => props.setColorMode('uniform')}
+                        className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${props.colorMode === 'uniform'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                            }`}
+                    >
+                        Uniform
+                    </button>
+                    <button
+                        onClick={() => props.setColorMode('axis')}
+                        className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${props.colorMode === 'axis'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                            }`}
+                    >
+                        Axis
+                    </button>
+                </div>
+
+                {props.colorMode === 'uniform' ? (
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="color"
+                            value={props.cubeColor}
+                            onChange={e => props.setCubeColor(e.target.value)}
+                            className="w-8 h-8 rounded border border-zinc-700 bg-zinc-800 cursor-pointer"
+                            style={{ padding: 0 }}
+                        />
+                        <input
+                            type="text"
+                            value={props.cubeColor}
+                            onChange={e => props.setCubeColor(e.target.value)}
+                            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white font-mono text-xs flex-1"
+                            placeholder="#3f3f46"
+                        />
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-1.5 text-xs">
+                        <p className="text-zinc-500">Faces colored by their axis direction, matching the coordinate triad.</p>
+                        <div className="flex gap-2">
+                            <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#ef4444' }} /> X</span>
+                            <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#22c55e' }} /> Y</span>
+                            <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#3b82f6' }} /> Z</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="mt-auto pt-4 flex gap-2">

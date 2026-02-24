@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Center } from '@react-three/drei';
-import { TensorGrid } from './TensorGrid';
+import { TensorGrid, type ColorMode } from './TensorGrid';
 import { AxisTriad, type AxisLabels } from './AxisTriad';
 import type { BoxInstance } from '../lib/layout';
 import type { Camera } from 'three';
@@ -10,6 +10,8 @@ interface SceneProps {
     layout: BoxInstance[];
     onHover: (b: BoxInstance | null) => void;
     axisLabels?: AxisLabels;
+    colorMode: ColorMode;
+    cubeColor: string;
 }
 
 /** Tiny helper rendered *inside* the main Canvas to expose the camera ref */
@@ -25,7 +27,7 @@ function CameraExposer({ onCamera }: { onCamera: (c: Camera) => void }) {
     return null;
 }
 
-export function Scene({ layout, onHover, axisLabels }: SceneProps) {
+export function Scene({ layout, onHover, axisLabels, colorMode, cubeColor }: SceneProps) {
     const [mainCamera, setMainCamera] = useState<Camera | null>(null);
 
     return (
@@ -38,7 +40,7 @@ export function Scene({ layout, onHover, axisLabels }: SceneProps) {
                 <CameraExposer onCamera={setMainCamera} />
 
                 <Center>
-                    <TensorGrid layout={layout} onHover={onHover} />
+                    <TensorGrid layout={layout} onHover={onHover} colorMode={colorMode} cubeColor={cubeColor} />
                 </Center>
                 <OrbitControls makeDefault />
             </Canvas>
