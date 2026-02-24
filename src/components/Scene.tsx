@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Center, Environment } from '@react-three/drei';
+import { OrbitControls, Center } from '@react-three/drei';
 import { TensorGrid } from './TensorGrid';
 import type { BoxInstance } from '../lib/layout';
 
@@ -16,9 +16,8 @@ export function Scene({ layout, onHover }: SceneProps) {
                 gl={{ preserveDrawingBuffer: true }}
                 id="tensor-canvas"
             >
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[10, 10, 10]} intensity={1.5} />
-                <Environment preset="city" />
+
+
                 <Center>
                     <TensorGrid layout={layout} onHover={onHover} />
                 </Center>

@@ -1,5 +1,5 @@
-import { useRef, useMemo, useEffect, useState } from 'react';
-import { InstancedMesh, Object3D, Color, BoxGeometry, EdgesGeometry } from 'three';
+import { useRef, useEffect, useMemo } from 'react';
+import { InstancedMesh, Object3D, BoxGeometry, EdgesGeometry, Float32BufferAttribute, BufferGeometry } from 'three';
 import type { BoxInstance } from '../lib/layout';
 
 interface TensorGridProps {
@@ -7,114 +7,92 @@ interface TensorGridProps {
     onHover: (instance: BoxInstance | null) => void;
 }
 
-const colorScale = [
-    new Color('#3b82f6'), // blue-500
-    new Color('#10b981'), // emerald-500
-    new Color('#f59e0b'), // amber-500
-    new Color('#ef4444'), // red-500
-];
+const dummy = new Object3D();
+const SCALE = 0.85;
 
-function getColorForValue(val: number, min: number, max: number): Color {
-    if (min === max) return colorScale[0];
-    const t = Math.max(0, Math.min(1, (val - min) / (max - min)));
-    const idx = t * (colorScale.length - 1);
-    const left = Math.floor(idx);
-    const right = Math.ceil(idx);
-    if (left === right) return colorScale[left].clone();
-    const c = colorScale[left].clone();
-    c.lerp(colorScale[right], idx - left);
-    return c;
-}
-
-const DEFAULT_COLOR = new Color('#3f3f46');
+// Pre-compute edge template vertices from a unit box
+const edgeTemplate = (() => {
+    const box = new BoxGeometry(1, 1, 1);
+    const edges = new EdgesGeometry(box);
+    const pos = edges.getAttribute('position');
+    const verts: number[] = [];
+    for (let i = 0; i < pos.count; i++) {
+        verts.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+    }
+    box.dispose();
+    edges.dispose();
+    return verts;
+})();
 
 export function TensorGrid({ layout, onHover }: TensorGridProps) {
     const meshRef = useRef<InstancedMesh>(null);
-    const edgesRef = useRef<InstancedMesh>(null);
-    const dummy = useMemo(() => new Object3D(), []);
+    const linesRef = useRef<any>(null);
 
-    const [hoveredId, setHoveredId] = useState<number | null>(null);
+    // Build a merged line geometry for all box edges
+    const edgesGeometry = useMemo(() => {
+        if (layout.length === 0) return null;
 
-    const edgesGeom = useMemo(() => new EdgesGeometry(new BoxGeometry(1, 1, 1)), []);
+        const vertsPerBox = edgeTemplate.length;
+        const totalFloats = layout.length * vertsPerBox;
+        const positions = new Float32Array(totalFloats);
 
-    useEffect(() => {
-        if (!meshRef.current || !edgesRef.current || layout.length === 0) return;
+        layout.forEach((inst, i) => {
+            const [cx, cy, cz] = inst.position;
+            const offset = i * vertsPerBox;
 
-        let minVal = Infinity;
-        let maxVal = -Infinity;
-        let hasData = false;
-        layout.forEach(l => {
-            if (l.value !== undefined) {
-                hasData = true;
-                if (l.value < minVal) minVal = l.value;
-                if (l.value > maxVal) maxVal = l.value;
+            for (let j = 0; j < vertsPerBox; j += 3) {
+                positions[offset + j] = edgeTemplate[j] * SCALE + cx;
+                positions[offset + j + 1] = edgeTemplate[j + 1] * SCALE + cy;
+                positions[offset + j + 2] = edgeTemplate[j + 2] * SCALE + cz;
             }
         });
+
+        const geo = new BufferGeometry();
+        geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+        return geo;
+    }, [layout]);
+
+    // Set instance matrices — only when layout changes
+    useEffect(() => {
+        if (!meshRef.current || layout.length === 0) return;
 
         layout.forEach((inst, i) => {
             dummy.position.set(...inst.position);
-            const isHovered = i === hoveredId;
-            const scale = isHovered ? 0.95 : 0.85;
-            dummy.scale.set(scale, scale, scale);
+            dummy.scale.set(SCALE, SCALE, SCALE);
             dummy.updateMatrix();
-
             meshRef.current!.setMatrixAt(i, dummy.matrix);
-            edgesRef.current!.setMatrixAt(i, dummy.matrix);
-
-            let c = DEFAULT_COLOR;
-            if (hasData && inst.value !== undefined) {
-                c = getColorForValue(inst.value, minVal, maxVal);
-            }
-
-            const finalColor = c.clone();
-            if (isHovered) {
-                finalColor.lerp(new Color('white'), 0.4);
-            }
-            meshRef.current!.setColorAt(i, finalColor);
-            edgesRef.current!.setColorAt(i, new Color(isHovered ? 'white' : '#18181b')); // edges
         });
 
         meshRef.current.instanceMatrix.needsUpdate = true;
-        edgesRef.current.instanceMatrix.needsUpdate = true;
-        if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-        if (edgesRef.current.instanceColor) edgesRef.current.instanceColor.needsUpdate = true;
-
-    }, [layout, hoveredId, dummy, edgesGeom]);
+    }, [layout]);
 
     if (layout.length === 0) return null;
 
     return (
-        <group>
+        <group key={layout.length}>
             <instancedMesh
                 ref={meshRef}
                 args={[undefined, undefined, layout.length]}
                 onPointerMove={(e) => {
                     e.stopPropagation();
-                    if (e.instanceId !== undefined && e.instanceId !== hoveredId) {
-                        setHoveredId(e.instanceId);
+                    if (e.instanceId !== undefined) {
                         onHover(layout[e.instanceId]);
                     }
                 }}
                 onPointerOut={(e) => {
                     e.stopPropagation();
-                    setHoveredId(null);
                     onHover(null);
                 }}
             >
                 <boxGeometry args={[1, 1, 1]} />
-                <meshStandardMaterial
-                    roughness={0.4}
-                    metalness={0.1}
-                    toneMapped={false}
-                    polygonOffset
-                    polygonOffsetFactor={1}
-                    polygonOffsetUnits={1}
-                />
+                <meshBasicMaterial color="#3f3f46" />
             </instancedMesh>
-
-            <instancedMesh ref={edgesRef} args={[edgesGeom, undefined, layout.length]}>
-                <lineBasicMaterial toneMapped={false} />
-            </instancedMesh>
+            {/* Black edge outlines as merged lineSegments */}
+            {edgesGeometry && (
+                <lineSegments ref={linesRef} geometry={edgesGeometry}>
+                    <lineBasicMaterial color="black" />
+                </lineSegments>
+            )}
         </group>
     );
 }

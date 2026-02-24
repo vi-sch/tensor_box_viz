@@ -74,9 +74,9 @@ export function computeLayout(config: LayoutConfig): BoxInstance[] {
     if (mode === 'slicing') {
         activePageDims = [...outerDims];
     } else {
-        // Tiling mode lets up to 2 outer dims tile in X and Y
-        activePageDims = outerDims.slice(0, Math.max(0, outerDims.length - 2));
-        activeTileDims = outerDims.slice(Math.max(0, outerDims.length - 2));
+        // Tiling mode propagates through all N outer dimensions
+        activePageDims = [];
+        activeTileDims = [...outerDims];
     }
 
     // Determine Sampled Indices
@@ -92,10 +92,39 @@ export function computeLayout(config: LayoutConfig): BoxInstance[] {
     const [sx, sy, sz] = spatialDims;
     const blockSizeX = sx !== null ? dimIndices[sx].length : 1;
     const blockSizeY = sy !== null ? dimIndices[sy].length : 1;
+    const blockSizeZ = sz !== null ? dimIndices[sz].length : 1;
 
     const SPACING = 2; // gaps between replicated cubes
     const stepX = blockSizeX + SPACING;
     const stepY = blockSizeY + SPACING;
+    const stepZ = blockSizeZ + SPACING;
+
+    // Calculate step size for each tiled dimension
+    // Cycle: rows (Y) -> columns (X) -> depth (Z) -> repeat
+    const tileSteps = new Map<number, { axis: 'x' | 'y' | 'z', step: number }>();
+    let currentStepY = stepY;
+    let currentStepX = stepX;
+    let currentStepZ = stepZ;
+
+    if (mode === 'tiling') {
+        activeTileDims.forEach((dim, i) => {
+            const numCells = dimIndices[dim].length;
+            const axisIndex = i % 3;
+            if (axisIndex === 0) {
+                // Tile dim follows Y (rows)
+                tileSteps.set(dim, { axis: 'y', step: currentStepY });
+                currentStepY = currentStepY * numCells + SPACING;
+            } else if (axisIndex === 1) {
+                // Tile dim follows X (columns)
+                tileSteps.set(dim, { axis: 'x', step: currentStepX });
+                currentStepX = currentStepX * numCells + SPACING;
+            } else {
+                // Tile dim follows Z (depth)
+                tileSteps.set(dim, { axis: 'z', step: currentStepZ });
+                currentStepZ = currentStepZ * numCells + SPACING;
+            }
+        });
+    }
 
     const instances: BoxInstance[] = [];
 
@@ -107,19 +136,24 @@ export function computeLayout(config: LayoutConfig): BoxInstance[] {
             const rY = sy !== null ? dimIndices[sy].indexOf(indexPath[sy]) : 0;
             const rZ = sz !== null ? dimIndices[sz].indexOf(indexPath[sz]) : 0;
 
-            let tx = 0, ty = 0;
-            if (activeTileDims.length === 2) {
-                const [dY, dX] = activeTileDims;
-                ty = dimIndices[dY].indexOf(indexPath[dY]);
-                tx = dimIndices[dX].indexOf(indexPath[dX]);
-            } else if (activeTileDims.length === 1) {
-                const [dX] = activeTileDims;
-                tx = dimIndices[dX].indexOf(indexPath[dX]);
+            let addX = 0, addY = 0, addZ = 0;
+            for (const tileDim of activeTileDims) {
+                const info = tileSteps.get(tileDim);
+                if (info) {
+                    const idx = dimIndices[tileDim].indexOf(indexPath[tileDim]);
+                    if (info.axis === 'x') {
+                        addX += idx * info.step;
+                    } else if (info.axis === 'y') {
+                        addY += idx * info.step;
+                    } else {
+                        addZ += idx * info.step;
+                    }
+                }
             }
 
-            const x = rX + (tx * stepX);
-            const y = -rY - (ty * stepY);
-            const z = rZ;
+            const x = rX + addX;
+            const y = -rY - addY;
+            const z = -rZ - addZ;
 
             instances.push({
                 id: indexPath.join(','),

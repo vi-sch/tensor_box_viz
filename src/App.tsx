@@ -6,12 +6,17 @@ import { parseShape, parseTensor, computeLayout, type BoxInstance } from './lib/
 export default function App() {
   const [shapeStr, setShapeStr] = useState('2, 3, 4, 5'); // Example shape [B, C, H, W]
   const [dataStr, setDataStr] = useState('');
+
+  // Reset when shape string changes
+  const handleSetShapeStr = (s: string) => {
+    setShapeStr(s);
+    setSliceIndices({});
+  };
   const [labelsStr, setLabelsStr] = useState('B, C, H, W');
   const [maxCells, setMaxCells] = useState(8);
   const [mode, setMode] = useState<'tiling' | 'slicing'>('tiling');
 
-  const [spatialDims, setSpatialDims] = useState<[number | null, number | null, number | null]>([null, null, null]);
-  const [userAssignedDims, setUserAssignedDims] = useState(false);
+  const [dimOrder, setDimOrder] = useState<'first-to-last' | 'last-to-first'>('first-to-last');
 
   const [sliceIndices, setSliceIndices] = useState<Record<number, number>>({});
   const [hovered, setHovered] = useState<BoxInstance | null>(null);
@@ -27,24 +32,30 @@ export default function App() {
     return parseShape(shapeStr);
   }, [shapeStr, tensorData]);
 
-  const handleSetSpatialDims = (dims: [number | null, number | null, number | null]) => {
-    setSpatialDims(dims);
-    setUserAssignedDims(true);
-  };
-
-  // Determine active spatial dims: fallback to last 3 if not overridden by user
+  // Determine active spatial dims based on dimension order
   const effectiveSpatialDims = useMemo(() => {
-    if (userAssignedDims) return spatialDims;
     const l = shape.length;
-    return [
-      l >= 2 ? 1 : null, // X (2nd dim, e.g. columns)
-      l >= 1 ? 0 : null, // Y (1st dim, e.g. rows)
-      l >= 3 ? 2 : null, // Z (3rd dim, e.g. depth)
-    ] as [number | null, number | null, number | null];
-  }, [userAssignedDims, spatialDims, shape.length]);
+    if (dimOrder === 'first-to-last') {
+      // First dims map to spatial: dim0→Y, dim1→X, dim2→Z
+      return [
+        l >= 2 ? 1 : null, // X
+        l >= 1 ? 0 : null, // Y
+        l >= 3 ? 2 : null, // Z
+      ] as [number | null, number | null, number | null];
+    } else {
+      // Last dims map to spatial: last→Y, second-to-last→X, third-to-last→Z
+      return [
+        l >= 2 ? l - 2 : null, // X
+        l >= 1 ? l - 1 : null, // Y
+        l >= 3 ? l - 3 : null, // Z
+      ] as [number | null, number | null, number | null];
+    }
+  }, [dimOrder, shape.length]);
 
   const validSpatialDims = effectiveSpatialDims.map(d => (d !== null && d >= 0 && d < shape.length) ? d : null) as [number | null, number | null, number | null];
-  const outerDims = shape.map((_, i) => i).filter(d => !validSpatialDims.includes(d));
+  const outerDims = useMemo(() => {
+    return shape.map((_, i) => i).filter(d => !validSpatialDims.includes(d));
+  }, [shape, validSpatialDims]);
 
   const layout = useMemo(() => {
     return computeLayout({
@@ -63,7 +74,7 @@ export default function App() {
   };
 
   const handleExportPng = () => {
-    const canvas = document.getElementById('tensor-canvas') as HTMLCanvasElement;
+    const canvas = document.querySelector('#tensor-canvas canvas') as HTMLCanvasElement;
     if (!canvas) return;
     const link = document.createElement('a');
     link.download = 'tensor-grid.png';
@@ -78,6 +89,7 @@ export default function App() {
     link.download = 'tensor-grid-settings.json';
     link.href = URL.createObjectURL(blob);
     link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   const labels = labelsStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -85,12 +97,12 @@ export default function App() {
   return (
     <div className="flex w-screen h-screen overflow-hidden bg-zinc-950 font-sans text-sm selection:bg-zinc-700">
       <Sidebar
-        shapeStr={shapeStr} setShapeStr={setShapeStr}
+        shapeStr={shapeStr} setShapeStr={handleSetShapeStr}
         dataStr={dataStr} setDataStr={setDataStr}
         labelsStr={labelsStr} setLabelsStr={setLabelsStr}
         maxCells={maxCells} setMaxCells={setMaxCells}
         mode={mode} setMode={setMode}
-        spatialDims={validSpatialDims} setSpatialDims={handleSetSpatialDims}
+        dimOrder={dimOrder} setDimOrder={setDimOrder}
         outerDims={outerDims}
         sliceIndices={sliceIndices} setSliceIndex={handleSetSliceIndex}
         shape={shape}

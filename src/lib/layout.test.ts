@@ -84,8 +84,8 @@ describe('Layout Logic', () => {
             mode: 'tiling',
             sliceIndices: { 0: 0 }
         });
-        // Dim 0 is active page dim, so size 1. Dim 1,2 are tile dims, sizes 2, 2.
-        // Spaces: 1 * 2 * 2 * (3 * 4 * 5) = 240
-        expect(layout.length).toBe(240);
+        // Dim 0, 1, 2 are all tiled dims, sizes 2, 2, 2.
+        // Spaces: 2 * 2 * 2 * (3 * 4 * 5) = 480
+        expect(layout.length).toBe(480);
     });
 });
