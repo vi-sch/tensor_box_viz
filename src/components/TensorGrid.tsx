@@ -1,5 +1,5 @@
-import { useRef, useEffect, useMemo } from 'react';
-import { InstancedMesh, Object3D, BoxGeometry, EdgesGeometry, Float32BufferAttribute, BufferGeometry } from 'three';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
+import { InstancedMesh, Object3D, Color, BoxGeometry, EdgesGeometry, Float32BufferAttribute, BufferGeometry, Raycaster } from 'three';
 import type { BoxInstance } from '../lib/layout';
 
 interface TensorGridProps {
@@ -9,6 +9,8 @@ interface TensorGridProps {
 
 const dummy = new Object3D();
 const SCALE = 0.85;
+const BASE_COLOR = new Color('#3f3f46');
+const HOVER_COLOR = new Color('#818cf8'); // indigo-400
 
 // Pre-compute edge template vertices from a unit box
 const edgeTemplate = (() => {
@@ -26,7 +28,7 @@ const edgeTemplate = (() => {
 
 export function TensorGrid({ layout, onHover }: TensorGridProps) {
     const meshRef = useRef<InstancedMesh>(null);
-    const linesRef = useRef<any>(null);
+    const prevHoveredRef = useRef<number | null>(null);
 
     // Build a merged line geometry for all box edges
     const edgesGeometry = useMemo(() => {
@@ -52,44 +54,87 @@ export function TensorGrid({ layout, onHover }: TensorGridProps) {
         return geo;
     }, [layout]);
 
-    // Set instance matrices — only when layout changes
+    // Set instance matrices and base colors — only when layout changes
     useEffect(() => {
-        if (!meshRef.current || layout.length === 0) return;
+        const mesh = meshRef.current;
+        if (!mesh || layout.length === 0) return;
+
+        // Update instance count for when layout size changes
+        mesh.count = layout.length;
 
         layout.forEach((inst, i) => {
             dummy.position.set(...inst.position);
             dummy.scale.set(SCALE, SCALE, SCALE);
             dummy.updateMatrix();
-            meshRef.current!.setMatrixAt(i, dummy.matrix);
+            mesh.setMatrixAt(i, dummy.matrix);
+            mesh.setColorAt(i, BASE_COLOR);
         });
 
-        meshRef.current.instanceMatrix.needsUpdate = true;
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+        // Critical: recompute bounding volumes so raycasting works for all instances
+        mesh.computeBoundingBox();
+        mesh.computeBoundingSphere();
+
+        prevHoveredRef.current = null;
     }, [layout]);
+
+    // Lightweight per-instance highlight: only touches 2 instances (old + new)
+    const setHoverHighlight = useCallback((instanceId: number | null) => {
+        const mesh = meshRef.current;
+        if (!mesh) return;
+
+        const prev = prevHoveredRef.current;
+        if (prev === instanceId) return;
+
+        // Reset previous
+        if (prev !== null && prev < mesh.count) {
+            mesh.setColorAt(prev, BASE_COLOR);
+        }
+        // Set new
+        if (instanceId !== null && instanceId < mesh.count) {
+            mesh.setColorAt(instanceId, HOVER_COLOR);
+        }
+
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        prevHoveredRef.current = instanceId;
+    }, []);
+
+    const handlePointerMove = useCallback((e: any) => {
+        e.stopPropagation();
+        if (e.instanceId !== undefined) {
+            setHoverHighlight(e.instanceId);
+            onHover(layout[e.instanceId] ?? null);
+        }
+    }, [layout, onHover, setHoverHighlight]);
+
+    const handlePointerOut = useCallback((e: any) => {
+        e.stopPropagation();
+        setHoverHighlight(null);
+        onHover(null);
+    }, [onHover, setHoverHighlight]);
 
     if (layout.length === 0) return null;
 
+    // Use a large enough maxCount to avoid remounting on layout size changes
+    const maxCount = Math.max(layout.length, 512);
+
     return (
-        <group key={layout.length}>
+        <group>
             <instancedMesh
                 ref={meshRef}
-                args={[undefined, undefined, layout.length]}
-                onPointerMove={(e) => {
-                    e.stopPropagation();
-                    if (e.instanceId !== undefined) {
-                        onHover(layout[e.instanceId]);
-                    }
-                }}
-                onPointerOut={(e) => {
-                    e.stopPropagation();
-                    onHover(null);
-                }}
+                args={[undefined, undefined, maxCount]}
+                frustumCulled={false}
+                onPointerMove={handlePointerMove}
+                onPointerOut={handlePointerOut}
             >
                 <boxGeometry args={[1, 1, 1]} />
-                <meshBasicMaterial color="#3f3f46" />
+                <meshBasicMaterial color="#ffffff" />
             </instancedMesh>
-            {/* Black edge outlines as merged lineSegments */}
+            {/* Black edge outlines — raycast disabled so they don't block hover on boxes */}
             {edgesGeometry && (
-                <lineSegments ref={linesRef} geometry={edgesGeometry}>
+                <lineSegments geometry={edgesGeometry} raycast={() => null as unknown as void}>
                     <lineBasicMaterial color="black" />
                 </lineSegments>
             )}
